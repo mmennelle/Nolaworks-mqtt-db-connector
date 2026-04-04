@@ -55,15 +55,15 @@ journalctl -u mqtt-db-connector -f
 
 ## Mosquitto User Setup
 
-Create the `toolbot-db` user in your Mosquitto password file:
+Create theu <USERNAME>` user in your Mosquitto password file:
 
 ```bash
-mosquitto_passwd /etc/mosquitto/passwd toolbot-db
-# Enter password: nwcomm@toolbot
+mosquitto_passwd /etc/mosquitto/passwu <USERNAME>
+# Enter password: <PASSWORD>
 systemctl restart mosquitto
 ```
 
-Make sure the Mosquitto ACL allows `toolbot-db` to subscribe to `access/room/toolroom/card` and publish to `access/room/toolroom/response`.
+Make sure the Mosquitto ACL allowsu <USERNAME>` to subscribe to `access/room/toolroom/card` and publish to `access/room/toolroom/response`.
 
 ## Project Structure
 
@@ -85,10 +85,10 @@ From the Mosquitto LXC:
 
 ```bash
 # Simulate a card scan
-mosquitto_pub -h localhost -u toolbot-db -P 'nwcomm@toolbot' \
+mosquitto_pub -h localhost -u <USERNAME> -P '<PASSWORD>' \
   -t 'access/room/toolroom/card' -m '12345678'
 
 # Watch responses
-mosquitto_sub -h localhost -u toolbot-db -P 'nwcomm@toolbot' \
+mosquitto_sub -h localhost -u <USERNAME> -P '<PASSWORD>' \
   -t 'access/room/toolroom/response' -v
 ```
