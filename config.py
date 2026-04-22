@@ -15,6 +15,7 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://botuser:YOUR_PASSWORD@192.168.30.151:5432/signout_bot",
 )
+DB_TIMEZONE = os.getenv("DB_TIMEZONE", "America/Chicago")
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 MQTT_BROKER   = os.getenv("MQTT_BROKER", "localhost")

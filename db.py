@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from config import DATABASE_URL
+from config import DATABASE_URL, DB_TIMEZONE
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +55,13 @@ SELECT r.id, r.status, r.start_time, r.end_time, r.returned_at,
    AND (
          -- ACTIVE reservation: 10-min window before start, 10-min window after end
          (r.status = 'ACTIVE'
-          AND r.start_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE 'UTC')
-          AND r.end_time   + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE 'UTC'))
+        AND r.start_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE %s)
+        AND r.end_time   + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
        OR
          -- RETURNED reservation: 10-min grace after the user returned
          (r.status = 'RETURNED'
           AND r.returned_at IS NOT NULL
-          AND r.returned_at + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE 'UTC'))
+        AND r.returned_at + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
        )
  LIMIT 1;
 """
@@ -122,7 +122,7 @@ def _check(cur, card_id: str) -> tuple[bool, str]:
     username = card["username"]
 
     # ── 3. Check for valid tool-room reservation ──────────────────────────
-    cur.execute(CHECK_RESERVATION, (user_id,))
+    cur.execute(CHECK_RESERVATION, (user_id, DB_TIMEZONE, DB_TIMEZONE, DB_TIMEZONE))
     reservation = cur.fetchone()
 
     if reservation:
