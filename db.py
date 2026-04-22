@@ -7,7 +7,7 @@ Decision flow:
   1. Check global access_override table.
      - GRANT_ALL → GRANTED
      - DENY_ALL  → check if card owner is an admin (users.is_admin) → GRANTED / DENIED
-     - NORMAL    → continue to reservation check
+    - NORMAL    → if card owner is admin, GRANTED; otherwise continue to reservation check
   2. Look up card_id in rfid_cards → get user_id (card must be enabled).
   3. Query reservations + tools for a valid tool-room reservation:
      - ACTIVE:   start_time − 10 min ≤ now ≤ end_time + 10 min
@@ -16,12 +16,11 @@ Decision flow:
 """
 
 import logging
-from datetime import datetime, timezone
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from config import DATABASE_URL, DB_TIMEZONE
+from config import DATABASE_URL, DB_TIMEZONE   # adjust import to match your config module
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +54,13 @@ SELECT r.id, r.status, r.start_time, r.end_time, r.returned_at,
    AND (
          -- ACTIVE reservation: 10-min window before start, 10-min window after end
          (r.status = 'ACTIVE'
-        AND r.start_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE %s)
-        AND r.end_time   + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
+                    AND r.start_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE %s)
+                    AND r.end_time   + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
        OR
          -- RETURNED reservation: 10-min grace after the user returned
          (r.status = 'RETURNED'
           AND r.returned_at IS NOT NULL
-        AND r.returned_at + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
+                    AND r.returned_at + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
        )
  LIMIT 1;
 """
@@ -120,6 +119,14 @@ def _check(cur, card_id: str) -> tuple[bool, str]:
 
     user_id = card["user_id"]
     username = card["username"]
+
+    # Optional policy: admins always unlock in NORMAL mode.
+    # Card still must be enabled, so revoke/remove continues to work.
+    cur.execute(IS_USER_ADMIN, (user_id,))
+    user = cur.fetchone()
+    if user and user["is_admin"]:
+        logger.info("Admin bypass in NORMAL mode — granting card %s (%s)", card_id, username)
+        return True, "ADMIN_BYPASS_NORMAL"
 
     # ── 3. Check for valid tool-room reservation ──────────────────────────
     cur.execute(CHECK_RESERVATION, (user_id, DB_TIMEZONE, DB_TIMEZONE, DB_TIMEZONE))
