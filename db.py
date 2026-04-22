@@ -10,8 +10,10 @@ Decision flow:
     - NORMAL    → if card owner is admin, GRANTED; otherwise continue to reservation check
   2. Look up card_id in rfid_cards → get user_id (card must be enabled).
   3. Query reservations + tools for a valid tool-room reservation:
-     - ACTIVE:   start_time − 10 min ≤ now ≤ end_time + 10 min
-     - RETURNED: returned_at + 10 min ≥ now  (post-return grace)
+      - ACTIVE:   start window or end window only
+                      * start_time − 10 min ≤ now ≤ start_time + 10 min
+                      * end_time   − 10 min ≤ now ≤ end_time   + 10 min
+      - RETURNED: returned_at + 10 min ≥ now  (post-return grace)
   4. Return GRANTED or DENIED.
 """
 
@@ -52,10 +54,19 @@ SELECT r.id, r.status, r.start_time, r.end_time, r.returned_at,
  WHERE r.user_id   = %s
    AND t.is_tool_room = true
    AND (
-         -- ACTIVE reservation: 10-min window before start, 10-min window after end
+        -- ACTIVE reservation: access only near the start or end of the reservation.
          (r.status = 'ACTIVE'
-                    AND r.start_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE %s)
-                    AND r.end_time   + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s))
+                AND (
+                    (
+                     r.start_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE %s)
+                     AND r.start_time + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s)
+                    )
+                    OR
+                    (
+                     r.end_time - INTERVAL '10 minutes' <= (NOW() AT TIME ZONE %s)
+                     AND r.end_time + INTERVAL '10 minutes' >= (NOW() AT TIME ZONE %s)
+                    )
+                ))
        OR
          -- RETURNED reservation: 10-min grace after the user returned
          (r.status = 'RETURNED'
@@ -129,7 +140,10 @@ def _check(cur, card_id: str) -> tuple[bool, str]:
         return True, "ADMIN_BYPASS_NORMAL"
 
     # ── 3. Check for valid tool-room reservation ──────────────────────────
-    cur.execute(CHECK_RESERVATION, (user_id, DB_TIMEZONE, DB_TIMEZONE, DB_TIMEZONE))
+    cur.execute(
+        CHECK_RESERVATION,
+        (user_id, DB_TIMEZONE, DB_TIMEZONE, DB_TIMEZONE, DB_TIMEZONE, DB_TIMEZONE),
+    )
     reservation = cur.fetchone()
 
     if reservation:
