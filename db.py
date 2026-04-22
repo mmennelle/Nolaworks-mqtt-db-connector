@@ -46,6 +46,11 @@ SELECT is_admin
  LIMIT 1;
 """
 
+INSERT_SCAN_EVENT = """
+INSERT INTO rfid_scan_events (card_id, scanned_at, consumed)
+VALUES (%s, NOW(), false);
+"""
+
 CHECK_RESERVATION = """
 SELECT r.id, r.status, r.start_time, r.end_time, r.returned_at,
        r.tool_name, r.username
@@ -95,6 +100,12 @@ def check_access(card_id: str) -> tuple[bool, str]:
 
 
 def _check(cur, card_id: str) -> tuple[bool, str]:
+    # Log every swipe for admin capture workflows.
+    try:
+        cur.execute(INSERT_SCAN_EVENT, (card_id,))
+    except Exception as e:
+        logger.warning("Failed to log scan event for card %s: %s", card_id, e)
+
     # ── 1. Global override ────────────────────────────────────────────────
     cur.execute(GET_OVERRIDE)
     row = cur.fetchone()
